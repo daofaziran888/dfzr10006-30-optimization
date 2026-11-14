@@ -1,4 +1,5 @@
-"""服务指标采集接口：维护指标采集器，覆盖启动采集、暂停采集、关闭采集等动作。"""
+"""服务指标采集接口：维护指标采集器，覆盖启动采集、暂停采集、关闭采集，
+以及采集窗口的完成标记、断点恢复、公式切换与持久水位查询。"""
 from __future__ import annotations
 
 from typing import Any
@@ -28,6 +29,81 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/formulas", response_model=dict)
+def list_formulas() -> dict[str, Any]:
+    """返回当前支持的聚合公式代码与中文口径，供切换公式时选择。"""
+    return {"module": "metric", "formulas": service.supported_formulas()}
+
+
+@router.get("/collectors/{collector_no}/watermark", response_model=dict)
+def get_watermark(collector_no: str) -> dict[str, Any]:
+    """读取采集器的持久水位：刷新页面/重新打开后仍是同一份水位。"""
+    watermark = service.watermark(collector_no)
+    if watermark is None:
+        raise HTTPException(status_code=404, detail=f"指标采集器 {collector_no} 不存在或已归档")
+    return watermark
+
+
+@router.get("/collectors/{collector_no}/windows", response_model=dict)
+def list_windows(collector_no: str) -> dict[str, Any]:
+    """关联清单：查看该采集器全部窗口的完成标记与断点，水位与列表同源。"""
+    windows = service.windows(collector_no)
+    if windows is None:
+        raise HTTPException(status_code=404, detail=f"指标采集器 {collector_no} 不存在或已归档")
+    return windows
+
+
+@router.get("/collectors/{collector_no}/batches", response_model=dict)
+def list_batches(collector_no: str) -> dict[str, Any]:
+    """公式批次历史：旧口径批次归档在此，新窗口按生效批次取公式。"""
+    batches = service.batches(collector_no)
+    if batches is None:
+        raise HTTPException(status_code=404, detail=f"指标采集器 {collector_no} 不存在或已归档")
+    return batches
+
+
+@router.post("/collectors/{collector_no}/windows/ingest", response_model=ActionResult)
+def ingest_window(collector_no: str, payload: EntryPayload) -> ActionResult:
+    """提交一个采集窗口的样本。
+
+    - complete=false：失败/部分批次只写断点，窗口保持未完成，不推进水位；
+    - complete=true：打完成标记并冻结快照，水位才推进；
+    - 同一窗口键重复到达且已完成：直接返回已有标记，不再累加。
+    """
+    values = payload.values
+    window, message = service.submit_window(
+        collector_no,
+        window_key=str(values.get("window_key") or "").strip() or None,
+        samples=values.get("samples"),
+        complete=bool(values.get("complete", False)),
+        formula=str(values.get("formula") or "").strip() or None,
+    )
+    if window is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=window)
+
+
+@router.post("/collectors/{collector_no}/windows/recover", response_model=ActionResult)
+def recover_windows(collector_no: str) -> ActionResult:
+    """故障恢复：只处理未完成窗口；已完成窗口（含第一窗口）不会被再次计入。"""
+    result, message = service.recover_windows(collector_no)
+    if result is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=result)
+
+
+@router.post("/collectors/{collector_no}/formula/switch", response_model=ActionResult)
+def switch_formula(collector_no: str, payload: EntryPayload) -> ActionResult:
+    """切换聚合公式：旧采集数据快照保留旧公式，新窗口使用新公式并记录切换批次。"""
+    formula = str(payload.values.get("formula") or "").strip()
+    if not formula:
+        return ActionResult(ok=False, message="缺少必填字段：formula")
+    batch, message = service.switch_formula(collector_no, formula)
+    if batch is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=batch)
 
 
 @router.get("/{entry_id}", response_model=dict)

@@ -1,8 +1,10 @@
-"""服务指标采集业务规则：状态流转、字段校验与筛选口径都收在这里。"""
+"""服务指标采集业务规则：状态流转、字段校验、采集窗口完成标记与持久水位。"""
 from __future__ import annotations
 
 from typing import Any
 
+from app import metric_windows
+from app.metric_windows import FORMULAS
 from app.store import store
 
 MODULE = "metric"
@@ -59,3 +61,43 @@ class MetricService:
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"指标采集器已{action}"
+
+    # ---------- 采集窗口：完成标记 / 断点 / 水位 / 公式批次 ----------
+
+    def submit_window(
+        self,
+        collector_no: str,
+        *,
+        window_key: str | None,
+        samples: Any,
+        complete: bool,
+        formula: str | None,
+    ) -> tuple[dict[str, Any] | None, str]:
+        """提交采集窗口样本；complete=True 时打完成标记并推进水位，否则只保留断点。"""
+        return metric_windows.window_store.ingest(
+            collector_no,
+            window_key=window_key,
+            samples=samples,
+            complete=complete,
+            formula=formula,
+        )
+
+    def recover_windows(self, collector_no: str) -> tuple[dict[str, Any] | None, str]:
+        """故障恢复：仅处理未完成窗口，已完成窗口不再重复计入。"""
+        return metric_windows.window_store.recover(collector_no)
+
+    def switch_formula(self, collector_no: str, formula: str) -> tuple[dict[str, Any] | None, str]:
+        """切换聚合公式：旧批次归档保留旧口径，新窗口启用新公式并记录切换批次。"""
+        return metric_windows.window_store.switch_formula(collector_no, formula)
+
+    def watermark(self, collector_no: str) -> dict[str, Any] | None:
+        return metric_windows.window_store.get_watermark(collector_no)
+
+    def windows(self, collector_no: str) -> dict[str, Any] | None:
+        return metric_windows.window_store.list_windows(collector_no)
+
+    def batches(self, collector_no: str) -> dict[str, Any] | None:
+        return metric_windows.window_store.list_batches(collector_no)
+
+    def supported_formulas(self) -> dict[str, str]:
+        return dict(FORMULAS)

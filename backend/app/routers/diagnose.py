@@ -30,6 +30,18 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/metric-windows/{collector_no}", response_model=dict)
+def diagnose_metric_window(
+    collector_no: str,
+    window_seq: int = Query(..., description="采集窗口序号，与指标采集快照同一序号"),
+) -> dict[str, Any]:
+    """基于指标采集窗口快照做服务健康诊断；采集快照与诊断读取同一窗口序号。"""
+    diagnosis, message = service.diagnose_window(collector_no, window_seq)
+    if diagnosis is None:
+        raise HTTPException(status_code=404, detail=message)
+    return diagnosis
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条诊断报告明细；不存在时给出可读的错误说明。"""

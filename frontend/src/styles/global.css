@@ -33,3 +33,22 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .link { border: none; background: none; color: var(--brand); cursor: pointer; padding: 0; }
 .page-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .error-text { color: #b42318; }
+
+/* ===== 采集窗口 / 诊断面板 ===== */
+.panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-top: 16px; }
+.panel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 10px; }
+.panel-head h3 { font-size: 15px; margin: 0; }
+.panel .filter-item select, .panel .filter-item input {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; min-width: 200px; background: #fff;
+}
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; margin-bottom: 8px; align-items: end; }
+.notice-text { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.sub-title { font-size: 13px; margin: 16px 0 8px; color: #334155; }
+.result-box { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: #f8fafc; }
+.result-item { display: flex; flex-direction: column; gap: 2px; }
+.result-item strong { font-size: 13px; }
+.tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; white-space: nowrap; }
+.tag-ok { background: #ecfdf3; color: #027a48; border: 1px solid #abefc6; }
+.tag-pending { background: #fffaeb; color: #b54708; border: 1px solid #fedf89; }
+.tag-muted { background: #f1f5f9; color: var(--muted); border: 1px solid var(--border); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }

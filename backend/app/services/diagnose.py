@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app import metric_windows
 from app.store import store
 
 MODULE = "diagnose"
@@ -59,3 +60,13 @@ class DiagnoseService:
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"诊断报告已{action}"
+
+    def diagnose_window(
+        self, collector_no: str, window_seq: int
+    ) -> tuple[dict[str, Any] | None, str]:
+        """服务健康诊断：读取指标采集同一窗口序号的采集数据快照。
+
+        采集数据快照与诊断共用窗口仓库，保证两边看到的是同一份窗口序号与口径；
+        窗口未完成（只保留断点）时不允许诊断，避免把未确认数据当成健康依据。
+        """
+        return metric_windows.window_store.read_snapshot_for_diagnose(collector_no, window_seq)

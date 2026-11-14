@@ -41,12 +41,20 @@ const stats = [
 
 type Row = Record<string, string | number | null>
 
+type WindowDiagnosis = Record<string, string | number | null>
+
 export default function DiagnoseView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
   const filterFields = useMemo(() => columns.slice(0, 3), [])
+
+  // 指标采集窗口诊断：与采集数据快照读取同一窗口序号。
+  const [collectorNo, setCollectorNo] = useState('METR-0003')
+  const [windowSeq, setWindowSeq] = useState(1)
+  const [windowDiagnosis, setWindowDiagnosis] = useState<WindowDiagnosis | null>(null)
+  const [diagnoseNotice, setDiagnoseNotice] = useState('')
 
   const reload = useCallback(async () => {
     setErrorMessage('')
@@ -81,6 +89,24 @@ export default function DiagnoseView() {
       await reload()
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '服务健康诊断操作失败')
+    }
+  }
+
+  async function diagnoseMetricWindow() {
+    setWindowDiagnosis(null)
+    setDiagnoseNotice('')
+    try {
+      const response = await request(
+        `/api/diagnose/metric-windows/${encodeURIComponent(collectorNo.trim())}?window_seq=${windowSeq}`,
+      )
+      const payload = await response.json()
+      if (!response.ok) {
+        setDiagnoseNotice(String(payload.detail ?? '窗口诊断失败'))
+        return
+      }
+      setWindowDiagnosis(payload as WindowDiagnosis)
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '窗口诊断请求失败')
     }
   }
 
@@ -152,6 +178,44 @@ export default function DiagnoseView() {
           )}
         </tbody>
       </table>
+
+      <div className="panel">
+        <div className="panel-head">
+          <h3>指标采集窗口健康诊断（采集快照与诊断读取同一窗口序号）</h3>
+        </div>
+        <div className="form-grid">
+          <label className="filter-item">
+            <span>采集器编号</span>
+            <input value={collectorNo} onChange={(event) => setCollectorNo(event.target.value)} placeholder="例如 METR-0003" />
+          </label>
+          <label className="filter-item">
+            <span>采集窗口序号</span>
+            <input
+              type="number"
+              min={1}
+              value={windowSeq}
+              onChange={(event) => setWindowSeq(Number(event.target.value) || 1)}
+            />
+          </label>
+          <button className="btn primary" type="button" onClick={() => void diagnoseMetricWindow()}>
+            读取同窗口快照并诊断
+          </button>
+        </div>
+        {diagnoseNotice && <p className="notice-text">{diagnoseNotice}</p>}
+        {windowDiagnosis && (
+          <div className="result-box">
+            <h4 className="sub-title">窗口序号 {String(windowDiagnosis['窗口序号'])} 诊断结果（{String(windowDiagnosis['窗口键'])}）</h4>
+            <div className="form-grid">
+              {Object.entries(windowDiagnosis).map(([key, value]) => (
+                <div key={key} className="result-item">
+                  <span className="stat-label">{key}</span>
+                  <strong>{String(value ?? '—')}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <footer className="page-foot">
         <span>共 {total} 条服务健康诊断记录</span>

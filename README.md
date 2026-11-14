@@ -73,5 +73,33 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 指标采集窗口（METR-0001 / METR-0003 修复口径）
+
+`backend/app/metric_windows.py` 按「采集器 + 窗口键」管理采集窗口，状态原子落盘到
+`backend/app/data/metric_windows.json`（可用环境变量 `METRIC_WINDOW_STATE_PATH` 覆盖）：
+
+- 完成标记：窗口只允许完成一次，重复到达读取已有标记与快照，不再累加，修复短间隔下
+  恢复时第一窗口被重复计入、指标偏大的问题。
+- 断点续采：失败批次只写未完成窗口的断点；`/windows/recover` 仅处理未完成窗口。
+- 持久水位：水位只随完成标记推进，刷新页面/重启进程后从同一份水位继续，关联清单与水位同源。
+- 公式批次：切换聚合公式时旧快照保留旧公式并归档历史批次，新窗口按新批次公式采集。
+- 并发控制：同一窗口键串行处理，两个请求争抢同一监测窗口时只产生一个完成标记。
+- 同窗口序号：服务健康诊断经 `GET /api/diagnose/metric-windows/{采集器编号}?window_seq=N`
+  读取同一窗口序号的采集数据快照，未完成窗口不允许诊断。
+
+主要接口（前缀 `/api/metric`）：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/formulas` | 支持的聚合公式 |
+| GET | `/collectors/{no}/watermark` | 持久水位与未完成窗口 |
+| GET | `/collectors/{no}/windows` | 窗口完成标记与断点清单 |
+| GET | `/collectors/{no}/batches` | 公式切换批次历史 |
+| POST | `/collectors/{no}/windows/ingest` | 提交窗口样本（断点/完成标记，幂等） |
+| POST | `/collectors/{no}/windows/recover` | 故障恢复，仅处理未完成窗口 |
+| POST | `/collectors/{no}/formula/switch` | 切换聚合公式并归档旧批次 |
+
+后端测试：`cd backend && .venv/bin/python -m unittest discover -s tests -v`。
+
 领域：数据工程
 子方向：数据分析与数据应用

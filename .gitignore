@@ -85,3 +85,6 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 指标采集窗口持久状态 =====
+backend/app/data/
